@@ -3,6 +3,7 @@ import { oai_settings, openai_settings, openai_setting_names } from '../../../..
 import { simulate } from './simulate.js';
 import { applyPalette, themePalette } from './theme.js';
 import { findComments, pickedProfile, profiles, rememberProfile, translateTexts } from './translate.js';
+import { clearMarks, markText, searchRow } from './find.js';
 
 const FOLD_KEY = 'macrotrace-path-folded';
 const narrow = () => window.matchMedia('(max-width: 800px)').matches;
@@ -213,7 +214,7 @@ function renderCards(result, titleFor, tr, closed) {
                     <span class="mt-n">${card.n}</span>
                     <span class="mt-card-name">${esc(card.name)}</span>
                     ${names.map(n => `<span class="mt-chip">${esc(n)}</span>`).join('')}
-                    ${body ? '<span class="mt-card-fold fa-solid fa-chevron-up"></span>' : ''}
+                    ${body ? '<span class="mt-card-zoom fa-solid fa-expand" title="크게 보기"></span><span class="mt-card-fold fa-solid fa-chevron-up"></span>' : ''}
                 </div>
                 ${body ? `<div class="mt-card-body">${body}</div>` : ''}
             </div>`));
@@ -477,10 +478,92 @@ function render(root, name) {
         const head = e.target.closest('.mt-card-head.mt-foldable');
         if (!head) return;
         const card = head.closest('.mt-card');
+        if (e.target.closest('.mt-card-zoom')) {
+            openZoom(root, card);
+            return;
+        }
         const closed = card.classList.toggle('mt-closed');
         if (closed) state.closed.add(card.dataset.card);
         else state.closed.delete(card.dataset.card);
     });
+
+    // searches: left keeps only the cards that match, right marks the preview text
+    const notChrome = n => !n.parentElement?.closest('.mt-chip, .mt-n, .mt-card-fold, .mt-card-zoom');
+    state.findCards = (q) => {
+        clearMarks(cardsBox);
+        cardsBox.querySelectorAll('.mt-card').forEach(c => c.classList.remove('mt-find-out', 'mt-find-open'));
+        if (!q) return [];
+        const found = [];
+        for (const card of cardsBox.querySelectorAll('.mt-card')) {
+            const marks = markText(card, q, notChrome);
+            if (!marks.length) {
+                card.classList.add('mt-find-out');
+                continue;
+            }
+            if (card.classList.contains('mt-closed')) card.classList.add('mt-find-open');
+            found.push(...marks);
+        }
+        return found;
+    };
+    state.findPreview = (q) => {
+        clearMarks(msgs);
+        if (!q) return [];
+        // folded chat runs holding a match are opened first
+        const lower = q.toLowerCase();
+        msgs.querySelectorAll('.mt-msg[hidden]').forEach((m) => {
+            if (!m.hidden || !m.textContent.toLowerCase().includes(lower)) return;
+            let fold = m.previousElementSibling;
+            while (fold && !fold.classList.contains('mt-fold')) fold = fold.previousElementSibling;
+            fold?.click();
+        });
+        return [...msgs.querySelectorAll('.mt-text')].flatMap(t => markText(t, q));
+    };
+    root.mtSearch?.cards.refresh(false);
+    root.mtSearch?.preview.refresh(false);
+}
+
+/** The whole card source over the tool, without the height limit. */
+function openZoom(root, card) {
+    root.querySelector('.mt-zoom')?.remove();
+    const body = card.querySelector('.mt-card-body')?.cloneNode(true);
+    if (!body) return;
+    body.className = 'mt-zoom-body';
+    body.querySelectorAll('.mt-flash, .mt-now').forEach(x => x.classList.remove('mt-flash', 'mt-now'));
+    clearMarks(body);
+    const zoom = el(`
+        <div class="mt-zoom">
+            <div class="mt-zoom-head">
+                ${card.querySelector('.mt-n')?.outerHTML ?? ''}
+                <span class="mt-card-name">${esc(card.querySelector('.mt-card-name')?.textContent ?? '')}</span>
+                ${searchBar()}
+                <span class="mt-zoom-close fa-solid fa-xmark" title="닫기"></span>
+            </div>
+        </div>`);
+    zoom.append(body);
+    zoom.querySelector('.mt-zoom-close').addEventListener('click', () => zoom.remove());
+    root.append(zoom);
+
+    // its own word search; starts with whatever the left search holds
+    const bar = zoom.querySelector('.mt-search');
+    const search = searchRow(bar, () => (q) => {
+        clearMarks(body);
+        return q ? markText(body, q) : [];
+    });
+    const input = bar.querySelector('.mt-search-input');
+    input.value = root.querySelector('.mt-col-cards .mt-search-input')?.value ?? '';
+    search.refresh(true);
+    input.focus();
+}
+
+function searchBar() {
+    return `
+        <div class="mt-search">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input class="text_pole mt-search-input" type="search" placeholder="검색">
+            <span class="mt-search-count"></span>
+            <span class="mt-search-prev fa-solid fa-chevron-up"></span>
+            <span class="mt-search-next fa-solid fa-chevron-down"></span>
+        </div>`;
 }
 
 export async function openTracePopup() {
@@ -511,18 +594,26 @@ export async function openTracePopup() {
                             <span class="mt-fold-all" data-fold="close">전체 접기</span>
                         </span>
                     </h4>
-                    <div class="mt-path" hidden></div>
+                    <div class="mt-stick">
+                        ${searchBar()}
+                        <div class="mt-path" hidden></div>
+                    </div>
                     <div class="mt-cards-box"></div>
                 </div>
                 <div class="mt-col mt-col-preview">
                     <h4><i class="fa-solid fa-wand-magic-sparkles"></i>미리보기</h4>
+                    <div class="mt-stick">${searchBar()}</div>
                     <div class="mt-prompt"></div>
                 </div>
             </div>
         </div>`);
     const palette = themePalette();
     applyPalette(root, palette);
-    root.mtState = { result: null, tr: null, closed: new Set() };
+    root.mtState = { result: null, tr: null, closed: new Set(), findCards: null, findPreview: null };
+    root.mtSearch = {
+        cards: searchRow(root.querySelector('.mt-col-cards .mt-search'), () => root.mtState.findCards ?? (() => [])),
+        preview: searchRow(root.querySelector('.mt-col-preview .mt-search'), () => root.mtState.findPreview ?? (() => [])),
+    };
     const select = root.querySelector('.mt-preset');
     const trButton = root.querySelector('.mt-translate');
     const rerun = () => render(root, select.value);
@@ -579,7 +670,23 @@ export async function openTracePopup() {
 
     rerun();
     const shown = callGenericPopup(root, POPUP_TYPE.DISPLAY, '', { large: true, wide: true, allowVerticalScrolling: false });
+    // Esc closes the big view first, not the whole tool. The key is caught before the dialog turns it
+    // into 'cancel' (Chrome may close anyway on a cancelled 'cancel'); 'cancel' is covered as well.
+    const closeZoom = (e) => {
+        const zoom = root.querySelector('.mt-zoom');
+        if (!zoom) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        zoom.remove();
+    };
+    const dialog = root.closest('.popup');
+    dialog?.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeZoom(e); }, { capture: true });
+    dialog?.addEventListener('cancel', closeZoom, { capture: true });
     // a dark theme still gets a light window
     if (palette.darkBg) root.closest('.popup')?.classList.add('mt-light-popup');
+    // sticky rows and the big view paint over the cards with the window's own color
+    const popupBg = root.closest('.popup') ? getComputedStyle(root.closest('.popup')).backgroundColor : '';
+    const alpha = Number(popupBg.match(/rgba?\(([^)]+)\)/)?.[1].split(',')[3] ?? 1);
+    root.style.setProperty('--mt-page', popupBg && !popupBg.includes('rgba(0, 0, 0, 0)') && alpha > 0.9 ? popupBg : '#fff');
     await shown;
 }

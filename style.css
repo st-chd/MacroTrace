@@ -150,6 +150,145 @@
     display: none;
 }
 
+.mt-root {
+    position: relative;
+}
+
+.mt-search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    padding: 2px 10px;
+    border: 1px solid var(--mt-line);
+    border-radius: 999px;
+    background: var(--mt-card);
+}
+
+.mt-search > i {
+    font-size: 0.85em;
+    color: var(--mt-text-soft);
+}
+
+.popup .mt-root .mt-search .mt-search-input {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 3px 0;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    color: var(--mt-text) !important;
+}
+
+.mt-search-count {
+    min-width: 3em;
+    font-size: 0.8em;
+    text-align: right;
+    color: var(--mt-text-soft);
+}
+
+.mt-search-prev,
+.mt-search-next {
+    padding: 2px 4px;
+    cursor: pointer;
+    color: var(--mt-text-soft);
+}
+
+.mt-search-prev:hover,
+.mt-search-next:hover {
+    color: var(--mt-accent-strong);
+}
+
+/* search hits: yellow, apart from the macro marks */
+.mt-find {
+    background: #ffe58a;
+    color: inherit;
+    border-radius: 2px;
+}
+
+.mt-find.mt-find-cur {
+    background: #ffb53b;
+    box-shadow: 0 0 0 1px #e08e00;
+}
+
+.mt-card.mt-find-out {
+    display: none;
+}
+
+.mt-card.mt-closed.mt-find-open .mt-card-body {
+    display: block;
+}
+
+/* big view of one card */
+.mt-card-zoom {
+    margin-left: auto;
+    padding: 0 4px;
+    font-size: 0.8em;
+    color: var(--mt-text-soft);
+    cursor: pointer;
+}
+
+.mt-card-zoom:hover {
+    color: var(--mt-accent-strong);
+}
+
+.mt-card-zoom + .mt-card-fold {
+    margin-left: 2px;
+}
+
+.mt-zoom {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--mt-page, #fff);
+}
+
+.mt-zoom-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.05em;
+}
+
+.mt-zoom-head .mt-search {
+    flex: 0 1 360px;
+    margin: 0 0 0 auto;
+    font-size: 0.9em;
+}
+
+.mt-zoom-head .mt-search + .mt-zoom-close {
+    margin-left: 4px;
+}
+
+.mt-zoom-close {
+    margin-left: auto;
+    padding: 4px 6px;
+    cursor: pointer;
+    color: var(--mt-text-soft);
+}
+
+.mt-zoom-close:hover {
+    color: var(--mt-accent-strong);
+}
+
+.mt-zoom-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.mt-zoom-body .mt-src {
+    max-height: none;
+    font-size: 0.9em;
+}
+
 .mt-dim {
     color: var(--mt-text-soft);
 }
@@ -359,10 +498,16 @@
 }
 
 /* where a read value came from */
-.mt-path {
+/* search row (and the path on the left) stay on top while the column scrolls */
+.mt-stick {
     position: sticky;
     top: 0;
-    z-index: 2;
+    z-index: 3;
+    background: var(--mt-page, #fff);
+}
+
+.mt-path {
+    position: relative;
     margin-bottom: 8px;
     /* right side kept free for the fold button in the top corner */
     padding: 6px 30px 6px 8px;
