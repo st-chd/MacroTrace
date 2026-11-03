@@ -1,0 +1,179 @@
+{
+    "new_chat_prompt": "[Start a new Chat]",
+    "new_example_chat_prompt": "[Example Chat]",
+    "scenario_format": "{{scenario}}",
+    "personality_format": "{{personality}}",
+    "names_behavior": 0,
+    "send_if_empty": "",
+    "squash_system_messages": false,
+    "prompts": [
+        {
+            "identifier": "main",
+            "name": "Main Prompt",
+            "system_prompt": true,
+            "role": "system",
+            "content": "{{// The character keeps a steady mood unless provoked.}}{{setvar::이름2::처음 값}}{{setvar::mood::평온}}{{setvar::turn::1}}너는 {{char}}다. {{user}}와 대화한다.\n지금 기분: {{getvar::mood}}"
+        },
+        {
+            "identifier": "mt-state",
+            "name": "상태",
+            "system_prompt": false,
+            "role": "system",
+            "content": "{{//}}Track HP, turns and visits here.{{///}}{{addvar::turn::1}}{{.hp ??= 100}}{{.hp -= 5}}턴 {{getvar::turn}} / HP {{.hp}} / 방문 {{$visits++}}{{setvar::이름::{{getvar::이름2}}}}\n{{setvar::요약}}\n턴 {{getvar::turn}}, 처음 이름 {{getvar::이름2}}\n{{/setvar}}"
+        },
+        {
+            "identifier": "mt-cond",
+            "name": "말투",
+            "system_prompt": false,
+            "role": "system",
+            "content": "{{setvar::이름3::{{getvar::이름}}}}{{if {{.mood == 평온}}}}\n차분하게 말한다.\n{{else}}\n거칠게 말한다.\n{{/if}}"
+        },
+        {
+            "identifier": "nsfw",
+            "name": "Auxiliary Prompt",
+            "system_prompt": true,
+            "role": "system",
+            "content": ""
+        },
+        {
+            "identifier": "jailbreak",
+            "name": "Post-History Instructions",
+            "system_prompt": true,
+            "role": "system",
+            "content": "{{setvar::mood::긴장}}마지막 기분: {{getvar::mood}} / 이름: {{getvar::이름3}}\n요약: {{getvar::요약}}"
+        },
+        {
+            "identifier": "mt-depth",
+            "name": "깊이 주입",
+            "system_prompt": false,
+            "role": "system",
+            "injection_position": 1,
+            "injection_depth": 2,
+            "injection_order": 100,
+            "content": "[턴 {{getvar::turn}}, 기분 {{.mood}}]"
+        },
+        {
+            "identifier": "enhanceDefinitions",
+            "name": "Enhance Definitions",
+            "system_prompt": true,
+            "role": "system",
+            "marker": false,
+            "content": ""
+        },
+        {
+            "identifier": "dialogueExamples",
+            "name": "Chat Examples",
+            "system_prompt": true,
+            "marker": true
+        },
+        {
+            "identifier": "chatHistory",
+            "name": "Chat History",
+            "system_prompt": true,
+            "marker": true
+        },
+        {
+            "identifier": "worldInfoAfter",
+            "name": "World Info (after)",
+            "system_prompt": true,
+            "marker": true
+        },
+        {
+            "identifier": "worldInfoBefore",
+            "name": "World Info (before)",
+            "system_prompt": true,
+            "marker": true
+        },
+        {
+            "identifier": "charDescription",
+            "name": "Char Description",
+            "system_prompt": true,
+            "marker": true
+        },
+        {
+            "identifier": "charPersonality",
+            "name": "Char Personality",
+            "system_prompt": true,
+            "marker": true
+        },
+        {
+            "identifier": "scenario",
+            "name": "Scenario",
+            "system_prompt": true,
+            "marker": true
+        },
+        {
+            "identifier": "personaDescription",
+            "name": "Persona Description",
+            "system_prompt": true,
+            "marker": true
+        }
+    ],
+    "prompt_order": [
+        {
+            "character_id": 100001,
+            "order": [
+                {
+                    "identifier": "main",
+                    "enabled": true
+                },
+                {
+                    "identifier": "worldInfoBefore",
+                    "enabled": true
+                },
+                {
+                    "identifier": "personaDescription",
+                    "enabled": true
+                },
+                {
+                    "identifier": "charDescription",
+                    "enabled": true
+                },
+                {
+                    "identifier": "charPersonality",
+                    "enabled": true
+                },
+                {
+                    "identifier": "scenario",
+                    "enabled": true
+                },
+                {
+                    "identifier": "mt-state",
+                    "enabled": true
+                },
+                {
+                    "identifier": "mt-cond",
+                    "enabled": true
+                },
+                {
+                    "identifier": "enhanceDefinitions",
+                    "enabled": false
+                },
+                {
+                    "identifier": "nsfw",
+                    "enabled": true
+                },
+                {
+                    "identifier": "worldInfoAfter",
+                    "enabled": true
+                },
+                {
+                    "identifier": "dialogueExamples",
+                    "enabled": true
+                },
+                {
+                    "identifier": "chatHistory",
+                    "enabled": true
+                },
+                {
+                    "identifier": "jailbreak",
+                    "enabled": true
+                },
+                {
+                    "identifier": "mt-depth",
+                    "enabled": true
+                }
+            ]
+        }
+    ]
+}
