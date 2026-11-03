@@ -97,9 +97,57 @@
 
 .mt-col h4::after {
     content: '';
+    order: 1;
     flex: 1;
     height: 1px;
     background: var(--mt-line);
+}
+
+.mt-h-tools {
+    order: 2;
+    display: flex;
+    gap: 4px;
+    font-size: 0.78em;
+    font-weight: normal;
+}
+
+.mt-fold-all {
+    padding: 1px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--mt-line);
+    background: var(--mt-card);
+    color: var(--mt-text-soft);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.mt-fold-all:hover {
+    color: var(--mt-accent-strong);
+    border-color: var(--mt-accent-line);
+}
+
+.mt-card-head.mt-foldable {
+    cursor: pointer;
+}
+
+.mt-card-fold {
+    margin-left: auto;
+    padding: 0 2px;
+    font-size: 0.8em;
+    color: var(--mt-text-soft);
+    transition: transform 0.15s;
+}
+
+.mt-card-head.mt-foldable:hover .mt-card-fold {
+    color: var(--mt-accent-strong);
+}
+
+.mt-card.mt-closed .mt-card-fold {
+    transform: rotate(180deg);
+}
+
+.mt-card.mt-closed .mt-card-body {
+    display: none;
 }
 
 .mt-dim {
@@ -290,7 +338,8 @@
     white-space: pre-wrap;
     word-break: break-word;
     font-size: 0.94em;
-    line-height: 1.6;
+    /* room for the padded marks so boxes on neighbouring lines don't touch */
+    line-height: 1.9;
 }
 
 .mt-hit {
@@ -298,7 +347,10 @@
     background: var(--mt-accent-soft);
     box-shadow: inset 0 0 0 1px var(--mt-accent-line);
     border-radius: 6px;
-    padding: 0 4px;
+    padding: 2px 6px;
+    /* a result spanning lines gets its padding and corners on every line */
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
     cursor: pointer;
 }
 
@@ -329,6 +381,7 @@
 }
 
 .mt-path-from {
+    white-space: nowrap;
     padding: 0 6px;
     border-radius: 6px;
     background: var(--mt-accent-line);
@@ -356,6 +409,7 @@
 }
 
 .mt-path-step code {
+    white-space: nowrap;
     background: none;
     color: var(--mt-text);
     padding: 0;
@@ -544,8 +598,16 @@
         padding: 0 2px 4px 0;
     }
 
-    .mt-col h4 {
+    .mt-col-preview h4,
+    .mt-col-cards h4 > i,
+    .mt-col-cards h4 > .mt-h-label,
+    .mt-col-cards h4::after {
         display: none;
+    }
+
+    .mt-col-cards h4 {
+        justify-content: flex-end;
+        margin: 0 0 6px;
     }
 
     .mt-root[data-tab="preview"] .mt-col-cards,

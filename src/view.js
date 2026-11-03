@@ -39,6 +39,11 @@ function el(html) {
     return t.content.firstElementChild;
 }
 
+/** Single line for chips: newlines and runs of spaces become one space. */
+function oneLine(s, max) {
+    return short(String(s ?? '').replace(/\s+/g, ' ').trim(), max);
+}
+
 function short(s, max = 80) {
     s = String(s ?? '');
     return s.length > max ? s.slice(0, max) + '…' : s;
@@ -78,6 +83,8 @@ function valueChain(read) {
     const up = (r) => {
         if (r.from) step(r.from);
         else out.push({ root: r.readVar });
+        // {{getvar::{{getvar::chapter}}}}: the inner read picked which variable was read
+        nestedReads(r).forEach(up);
     };
     const step = (w) => {
         if (seen.has(w)) return;
@@ -183,7 +190,7 @@ function renderSource(doc, titleFor, tr) {
     return walk(0, text.length, nodes);
 }
 
-function renderCards(result, titleFor, tr) {
+function renderCards(result, titleFor, tr, closed) {
     const box = el('<div class="mt-cards"></div>');
     for (const card of result.cards) {
         const names = [...new Set(card.docs.flatMap(d => d.events).filter(ev => ev.name && !ev.synthetic).map(ev => ev.name))].slice(0, 6);
@@ -194,11 +201,12 @@ function renderCards(result, titleFor, tr) {
             }).join('')
             : (card.content ? `<div class="mt-src">${esc(card.content)}</div>` : '');
         box.append(el(`
-            <div class="mt-card${card.enabled ? '' : ' mt-off'}" data-card="${esc(card.id)}">
-                <div class="mt-card-head">
+            <div class="mt-card${card.enabled ? '' : ' mt-off'}${body && closed.has(card.id) ? ' mt-closed' : ''}" data-card="${esc(card.id)}">
+                <div class="mt-card-head${body ? ' mt-foldable' : ''}">
                     <span class="mt-n">${card.n}</span>
                     <span class="mt-card-name">${esc(card.name)}</span>
                     ${names.map(n => `<span class="mt-chip">${esc(n)}</span>`).join('')}
+                    ${body ? '<span class="mt-card-fold fa-solid fa-chevron-up"></span>' : ''}
                 </div>
                 ${body ? `<div class="mt-card-body">${body}</div>` : ''}
             </div>`));
@@ -220,7 +228,11 @@ function renderPartText(p, titleOf) {
         if (ev.outStart < cur) continue;
         html += esc(p.doc.output.slice(cur, ev.outStart));
         const title = titleOf(ev);
-        html += `<mark class="mt-hit" data-ev="${ev.n}"${title ? ` title="${esc(title)}"` : ''}>${esc(p.doc.output.slice(ev.outStart, ev.outEnd))}</mark>`;
+        const attrs = `data-ev="${ev.n}"${title ? ` title="${esc(title)}"` : ''}`;
+        // one mark per line, newlines outside, so blank lines don't get an empty box
+        html += p.doc.output.slice(ev.outStart, ev.outEnd).split(/(\n)/)
+            .map(piece => (piece === '\n' ? piece : piece ? `<mark class="mt-hit" ${attrs}>${esc(piece)}</mark>` : ''))
+            .join('');
         cur = ev.outEnd;
     }
     html += esc(p.doc.output.slice(cur, end));
@@ -319,12 +331,14 @@ function render(root, name) {
         return '';
     };
 
-    left.append(renderCards(result, titleFor, state.tr));
+    // listeners go on this render's own elements; `left` itself lives across renders
+    const cardsBox = renderCards(result, titleFor, state.tr, state.closed);
+    left.append(cardsBox);
     const msgs = renderPrompt(result, titleOf);
     right.append(msgs);
 
     const byN = n => result.events.find(x => x.n === Number(n)) ?? null;
-    const cardEl = id => (id ? left.querySelector(`.mt-card[data-card="${CSS.escape(id)}"]`) : null);
+    const cardEl = id => (id ? cardsBox.querySelector(`.mt-card[data-card="${CSS.escape(id)}"]`) : null);
     const macroEl = ev => cardEl(result.docCard.get(ev.doc))?.querySelector(`[data-ev="${ev.n}"]`) ?? null;
     // what was clicked and where it led stay marked until the next click
     const pick = (...els) => {
@@ -333,6 +347,11 @@ function render(root, name) {
     };
     const go = (target) => {
         if (!target) return;
+        const card = target.closest('.mt-card');
+        if (card?.classList.contains('mt-closed')) {
+            card.classList.remove('mt-closed');
+            state.closed.delete(card.dataset.card);
+        }
         if (narrow() && root.dataset.tab !== 'cards') {
             // the column was hidden until now, so a smooth scroll would not start; jump instead
             showTab(root, 'cards');
@@ -349,7 +368,7 @@ function render(root, name) {
         const last = chain.length - 1;
         // folded: value ← first step ⋯ +n ← last step
         const mid = i => (i > 0 && i < last ? ' mt-path-mid' : '');
-        path.append(el(`<span class="mt-path-from">${esc(short(from, 30))}</span>`));
+        path.append(el(`<span class="mt-path-from">${esc(oneLine(from, 30))}</span>`));
         chain.forEach((step, i) => {
             if (i === last && last > 1) {
                 const more = el(`<span class="mt-path-more">⋯ +${last - 1}</span>`);
@@ -365,7 +384,7 @@ function render(root, name) {
                 return;
             }
             const card = cardOf(result.docCard.get(step.doc));
-            const chip = el(`<span class="mt-path-step${mid(i)}">${card ? `<span class="mt-n">${card.n}</span>` : ''}<code>${esc(short(step.raw, 48))}${step.scopeEnd != null ? '…' : ''}</code></span>`);
+            const chip = el(`<span class="mt-path-step${mid(i)}">${card ? `<span class="mt-n">${card.n}</span>` : ''}<code>${esc(oneLine(step.raw, 40))}${step.scopeEnd != null ? '…' : ''}</code></span>`);
             chip.addEventListener('click', () => go(macroEl(step)));
             path.append(chip);
         });
@@ -377,9 +396,10 @@ function render(root, name) {
     };
     /** Follow a read value back up; the first step is where it was written. */
     const trace = (clicked, ev, from) => {
+        clicked = [].concat(clicked);
         const chain = valueChain(ev);
         const steps = chain.filter(s => !s.root);
-        pick(clicked, ...steps.map(macroEl));
+        pick(...clicked, ...steps.map(macroEl));
         showPath(from, chain);
         go(steps[0] ? macroEl(steps[0]) : null);
     };
@@ -387,14 +407,20 @@ function render(root, name) {
     msgs.addEventListener('click', (e) => {
         const mark = e.target.closest('.mt-hit');
         const ev = mark ? byN(mark.dataset.ev) : null;
+        // a result split over lines is several marks with the same number
+        const pieces = mark ? [...mark.closest('.mt-msg').querySelectorAll(`.mt-hit[data-ev="${mark.dataset.ev}"]`)] : [];
         if (ev && isRead(ev)) {
-            trace(mark, ev, mark.innerText);
+            // first the macro that put the text here; the path then climbs to where the value was written
+            const own = macroEl(ev);
+            pick(...pieces, own);
+            showPath(pieces.map(m => m.innerText).join(' '), [ev, ...valueChain(ev)]);
+            go(own);
             return;
         }
         showPath('', []);
         const macro = ev ? macroEl(ev) : null;
         if (macro) {
-            pick(mark, macro);
+            pick(...pieces, macro);
             go(macro);
             return;
         }
@@ -406,10 +432,19 @@ function render(root, name) {
     });
 
     // a read inside a card climbs one more step
-    left.addEventListener('click', (e) => {
+    cardsBox.addEventListener('click', (e) => {
         const span = e.target.closest('.mt-src-read');
         const ev = span ? byN(span.dataset.ev) : null;
         if (ev) trace(span, ev, ev.raw);
+    });
+
+    cardsBox.addEventListener('click', (e) => {
+        const head = e.target.closest('.mt-card-head.mt-foldable');
+        if (!head) return;
+        const card = head.closest('.mt-card');
+        const closed = card.classList.toggle('mt-closed');
+        if (closed) state.closed.add(card.dataset.card);
+        else state.closed.delete(card.dataset.card);
     });
 }
 
@@ -434,7 +469,13 @@ export async function openTracePopup() {
             </div>
             <div class="mt-body">
                 <div class="mt-col mt-col-cards">
-                    <h4><i class="fa-solid fa-table-cells-large"></i>프롬프트</h4>
+                    <h4>
+                        <i class="fa-solid fa-table-cells-large"></i><span class="mt-h-label">프롬프트</span>
+                        <span class="mt-h-tools">
+                            <span class="mt-fold-all" data-fold="open">전체 열기</span>
+                            <span class="mt-fold-all" data-fold="close">전체 접기</span>
+                        </span>
+                    </h4>
                     <div class="mt-path" hidden></div>
                     <div class="mt-cards-box"></div>
                 </div>
@@ -446,7 +487,7 @@ export async function openTracePopup() {
         </div>`);
     const palette = themePalette();
     applyPalette(root, palette);
-    root.mtState = { result: null, tr: null };
+    root.mtState = { result: null, tr: null, closed: new Set() };
     const select = root.querySelector('.mt-preset');
     const trButton = root.querySelector('.mt-translate');
     const rerun = () => render(root, select.value);
@@ -458,6 +499,15 @@ export async function openTracePopup() {
     });
     root.querySelector('.mt-rerun').addEventListener('click', rerun);
     root.querySelectorAll('.mt-tab').forEach(t => t.addEventListener('click', () => showTab(root, t.dataset.tab)));
+    root.querySelectorAll('.mt-fold-all').forEach(b => b.addEventListener('click', () => {
+        const close = b.dataset.fold === 'close';
+        root.querySelectorAll('.mt-card').forEach((card) => {
+            if (!card.querySelector('.mt-card-body')) return;
+            card.classList.toggle('mt-closed', close);
+            if (close) root.mtState.closed.add(card.dataset.card);
+            else root.mtState.closed.delete(card.dataset.card);
+        });
+    }));
 
     const profileSelect = root.querySelector('.mt-profile');
     if (profileSelect) {
