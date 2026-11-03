@@ -363,12 +363,9 @@
     position: sticky;
     top: 0;
     z-index: 2;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
     margin-bottom: 8px;
-    padding: 6px 8px;
+    /* right side kept free for the fold button in the top corner */
+    padding: 6px 30px 6px 8px;
     border: 1px solid var(--mt-accent-line);
     border-radius: 10px;
     background: #fff;
@@ -378,6 +375,16 @@
 
 .mt-path[hidden] {
     display: none;
+}
+
+/* a long path scrolls in here instead of covering the cards */
+.mt-path-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    max-height: 35vh;
+    overflow-y: auto;
 }
 
 .mt-path-from {
@@ -403,6 +410,22 @@
     cursor: pointer;
 }
 
+.mt-path-step.mt-cur {
+    border-color: var(--mt-accent-strong);
+    background: var(--mt-accent-soft);
+    box-shadow: 0 0 0 1px var(--mt-accent-strong);
+}
+
+/* the step of the path being looked at, inside its card */
+.mt-cards .mt-now {
+    outline: 2px solid var(--mt-accent-strong);
+    outline-offset: 1px;
+}
+
+.mt-cards .mt-picked {
+    cursor: pointer;
+}
+
 .mt-path-step:hover {
     border-color: var(--mt-accent-line);
     background: var(--mt-accent-soft);
@@ -422,8 +445,11 @@
     color: var(--mt-text-soft);
 }
 
+/* top right, so a long path can be folded without scrolling to its end */
 .mt-path-toggle {
-    margin-left: auto;
+    position: absolute;
+    top: 7px;
+    right: 8px;
     padding: 2px 4px;
     cursor: pointer;
     color: var(--mt-text-soft);

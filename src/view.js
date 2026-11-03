@@ -75,26 +75,33 @@ function varLabel(v) {
     return `${v?.scope === 'global' ? '전역 변수' : '채팅 변수'} ${v?.name ?? ''}`;
 }
 
-/** Where a read value came from, back to the first write (or a variable that was already there). */
-function valueChain(read) {
+/**
+ * Every macro a value passed through, starting with the read itself:
+ * read → the write it came from → reads inside that write → their writes …,
+ * ending at the first write or at a variable that was already there.
+ */
+function valueChain(start) {
     const out = [];
     const seen = new Set();
     const nestedReads = w => w.doc.events.filter(r => r !== w && r.start != null && w.start != null && r.start >= w.start && r.end <= (w.scopeEnd ?? w.end) && isRead(r));
-    const up = (r) => {
-        if (r.from) step(r.from);
+    const read = (r) => {
+        if (seen.has(r)) return;
+        seen.add(r);
+        out.push(r);
+        if (r.from) write(r.from);
         else out.push({ root: r.readVar });
         // {{getvar::{{getvar::chapter}}}}: the inner read picked which variable was read
-        nestedReads(r).forEach(up);
+        nestedReads(r).forEach(read);
     };
-    const step = (w) => {
+    const write = (w) => {
         if (seen.has(w)) return;
         seen.add(w);
         out.push(w);
-        nestedReads(w).forEach(up);
-        if (w.prevWrite) step(w.prevWrite);
+        nestedReads(w).forEach(read);
+        if (w.prevWrite) write(w.prevWrite);
         else if (w.prevVar) out.push({ root: w.prevVar });
     };
-    up(read);
+    read(start);
     return out;
 }
 
@@ -360,6 +367,8 @@ function render(root, name) {
         }
         flash(target);
     };
+    // The path stays as built from the clicked value; clicking its steps only moves the current one.
+    let trail = null;
     const showPath = (from, chain) => {
         path.replaceChildren();
         path.hidden = !chain.length;
@@ -368,7 +377,10 @@ function render(root, name) {
         const last = chain.length - 1;
         // folded: value ← first step ⋯ +n ← last step
         const mid = i => (i > 0 && i < last ? ' mt-path-mid' : '');
-        path.append(el(`<span class="mt-path-from">${esc(oneLine(from, 30))}</span>`));
+        // the steps scroll inside this box; the fold button stays outside it, top right
+        const chips = el('<div class="mt-path-chips"></div>');
+        path.append(chips);
+        chips.append(el(`<span class="mt-path-from">${esc(oneLine(from, 30))}</span>`));
         chain.forEach((step, i) => {
             if (i === last && last > 1) {
                 const more = el(`<span class="mt-path-more">⋯ +${last - 1}</span>`);
@@ -376,17 +388,17 @@ function render(root, name) {
                     path.classList.remove('mt-folded');
                     writeFolded(false);
                 });
-                path.append(more);
+                chips.append(more);
             }
-            path.append(el(`<i class="fa-solid fa-arrow-left-long mt-path-arrow${mid(i)}"></i>`));
+            chips.append(el(`<i class="fa-solid fa-arrow-left-long mt-path-arrow${mid(i)}"></i>`));
             if (step.root) {
-                path.append(el(`<span class="mt-path-root${mid(i)}">${esc(varLabel(step.root))}</span>`));
+                chips.append(el(`<span class="mt-path-root${mid(i)}">${esc(varLabel(step.root))}</span>`));
                 return;
             }
             const card = cardOf(result.docCard.get(step.doc));
-            const chip = el(`<span class="mt-path-step${mid(i)}">${card ? `<span class="mt-n">${card.n}</span>` : ''}<code>${esc(oneLine(step.raw, 40))}${step.scopeEnd != null ? '…' : ''}</code></span>`);
-            chip.addEventListener('click', () => go(macroEl(step)));
-            path.append(chip);
+            const chip = el(`<span class="mt-path-step${mid(i)}" data-i="${i}">${card ? `<span class="mt-n">${card.n}</span>` : ''}<code>${esc(oneLine(step.raw, 40))}${step.scopeEnd != null ? '…' : ''}</code></span>`);
+            chip.addEventListener('click', () => showStep(i));
+            chips.append(chip);
         });
         if (last > 1) {
             const toggle = el('<span class="mt-path-toggle fa-solid fa-chevron-up"></span>');
@@ -394,14 +406,34 @@ function render(root, name) {
             path.append(toggle);
         }
     };
-    /** Follow a read value back up; the first step is where it was written. */
-    const trace = (clicked, ev, from) => {
-        clicked = [].concat(clicked);
-        const chain = valueChain(ev);
-        const steps = chain.filter(s => !s.root);
-        pick(...clicked, ...steps.map(macroEl));
-        showPath(from, chain);
-        go(steps[0] ? macroEl(steps[0]) : null);
+    const showStep = (i) => {
+        if (!trail) return;
+        trail.cur = i;
+        path.querySelectorAll('.mt-path-step').forEach(c => c.classList.toggle('mt-cur', Number(c.dataset.i) === i));
+        // keep the current step in sight inside the path box
+        const chip = path.querySelector('.mt-path-step.mt-cur');
+        const box = path.querySelector('.mt-path-chips');
+        if (chip && box) {
+            const top = chip.offsetTop - box.offsetTop;
+            if (top < box.scrollTop || top + chip.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = top - box.clientHeight / 2;
+        }
+        cardsBox.querySelectorAll('.mt-now').forEach(x => x.classList.remove('mt-now'));
+        const step = trail.steps[i];
+        const target = step && !step.root ? macroEl(step) : null;
+        target?.classList.add('mt-now');
+        go(target);
+    };
+    /** A new path from a read value; its first step is the read itself. */
+    const startPath = (clicked, ev, from) => {
+        const steps = valueChain(ev);
+        trail = { steps, cur: 0 };
+        pick(...clicked, ...steps.filter(s => !s.root).map(macroEl));
+        showPath(from, steps);
+        showStep(0);
+    };
+    const clearPath = () => {
+        trail = null;
+        showPath('', []);
     };
 
     msgs.addEventListener('click', (e) => {
@@ -410,14 +442,10 @@ function render(root, name) {
         // a result split over lines is several marks with the same number
         const pieces = mark ? [...mark.closest('.mt-msg').querySelectorAll(`.mt-hit[data-ev="${mark.dataset.ev}"]`)] : [];
         if (ev && isRead(ev)) {
-            // first the macro that put the text here; the path then climbs to where the value was written
-            const own = macroEl(ev);
-            pick(...pieces, own);
-            showPath(pieces.map(m => m.innerText).join(' '), [ev, ...valueChain(ev)]);
-            go(own);
+            startPath(pieces, ev, pieces.map(m => m.innerText).join(' '));
             return;
         }
-        showPath('', []);
+        clearPath();
         const macro = ev ? macroEl(ev) : null;
         if (macro) {
             pick(...pieces, macro);
@@ -431,11 +459,18 @@ function render(root, name) {
         }
     });
 
-    // a read inside a card climbs one more step
+    // In a card: a macro on the path moves to the step after it; another read starts its own path.
     cardsBox.addEventListener('click', (e) => {
-        const span = e.target.closest('.mt-src-read');
+        const span = e.target.closest('.mt-cards [data-ev]');
         const ev = span ? byN(span.dataset.ev) : null;
-        if (ev) trace(span, ev, ev.raw);
+        if (!ev) return;
+        const i = trail ? trail.steps.indexOf(ev) : -1;
+        if (i >= 0) {
+            const next = trail.steps.findIndex((s, k) => k > i && !s.root);
+            showStep(next >= 0 ? next : i);
+            return;
+        }
+        if (isRead(ev)) startPath([span], ev, ev.raw);
     });
 
     cardsBox.addEventListener('click', (e) => {
