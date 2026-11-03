@@ -2,7 +2,7 @@ import { saveSettingsDebounced } from '../../../../../script.js';
 import { extension_settings } from '../../../../extensions.js';
 
 // Translations stay in this browser only (user's choice), keyed by the original comment text.
-const CACHE_KEY = 'macrotrace-translations';
+export const CACHE_KEY = 'macrotrace-translations';
 const COMMENT_HEAD = /^\{\{\s*(?:\/\/|comment\b)(?:\s*::)?/i;
 
 function loadCache() {

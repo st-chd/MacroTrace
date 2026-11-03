@@ -1,11 +1,16 @@
 {
     "display_name": "매크로 추적",
+    "description": "프리셋 매크로가 최종 프롬프트 어디에 들어가는지, 변수 값이 어디서 왔는지 보여 줍니다.",
     "loading_order": 120,
     "requires": [],
     "optional": [],
     "js": "index.js",
     "css": "style.css",
-    "author": "st-chd",
+    "author": "CH",
     "version": "0.1.0",
-    "auto_update": false
+    "homePage": "https://github.com/st-chd/MacroTrace",
+    "minimum_client_version": "1.19.0",
+    "hooks": {
+        "clean": "clean"
+    }
 }

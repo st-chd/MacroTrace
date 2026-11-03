@@ -5,7 +5,7 @@ import { applyPalette, themePalette } from './theme.js';
 import { findComments, pickedProfile, profiles, rememberProfile, translateTexts } from './translate.js';
 import { clearMarks, markText, searchRow } from './find.js';
 
-const FOLD_KEY = 'macrotrace-path-folded';
+export const FOLD_KEY = 'macrotrace-path-folded';
 const narrow = () => window.matchMedia('(max-width: 800px)').matches;
 
 function readFolded() {
